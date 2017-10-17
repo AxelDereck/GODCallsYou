@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">GOD Calls You</string>
+    <string name="action_download">Télécharger</string>
+    <string name="action_settings">Configuration</string>
+</resources>
