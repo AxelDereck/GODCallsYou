@@ -5,25 +5,31 @@ import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Bundle;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
-import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.net.MalformedURLException;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+
+import org.json.JSONObject;
+
 import java.util.Calendar;
 import java.util.List;
 
 import cm.catholique.godcallsyou.model.DbManager;
 import cm.catholique.godcallsyou.model.Texte;
 
-public class MainActivity extends AppCompatActivity implements TextesDownloaderHandler {
+public class MainActivity extends AppCompatActivity
+        implements TextesDownloaderHandler, Response.Listener<JSONObject>, Response.ErrorListener {
+
     private DbManager dbManager = null;
+
+    private int curMois = -1, curJour = -1;
+    private Texte curTexte = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,35 +38,23 @@ public class MainActivity extends AppCompatActivity implements TextesDownloaderH
         /// Initialisation de l'accès à la base de données
         DbManager.init(this);
         /// Vérification de la présence des textes du jour
-        /*
         dbManager = DbManager.getInstance();
         Calendar now = Calendar.getInstance();
-        int mois = now.get(Calendar.MONTH) + 1;
-        int jour = now.get(Calendar.DAY_OF_MONTH);
-        List<Texte> textesOfMonth = dbManager.getTextesByMonthNumber(mois);
-        Texte curTexte = null;
+        curMois = now.get(Calendar.MONTH) + 1;
+        curJour = now.get(Calendar.DAY_OF_MONTH);
+        List<Texte> textesOfMonth = dbManager.getTextesByMonthNumber(curMois);
         if (textesOfMonth.size() != 0) {
-            curTexte = dbManager.getTexteByJour(jour + "-" + mois);
+            curTexte = dbManager.getTexteByJour(curJour + "-" + curMois);
             if (null == curTexte)
                 launchTextesDownloader();
             else
                 showTexte(curTexte);
         } else
             launchTextesDownloader();
-        */
 
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Snackbar.make(view, "Choix du texte à afficher (Fonctionnalité à venir)", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
-            }
-        });
     }
 
     @Override
@@ -70,12 +64,11 @@ public class MainActivity extends AppCompatActivity implements TextesDownloaderH
         /// Vérification de la présence des textes du jour
         dbManager = DbManager.getInstance();
         Calendar now = Calendar.getInstance();
-        int mois = now.get(Calendar.MONTH) + 1;
-        int jour = now.get(Calendar.DAY_OF_MONTH);
-        List<Texte> textesOfMonth = dbManager.getTextesByMonthNumber(mois);
-        Texte curTexte = null;
+        curMois = now.get(Calendar.MONTH) + 1;
+        curJour = now.get(Calendar.DAY_OF_MONTH);
+        List<Texte> textesOfMonth = dbManager.getTextesByMonthNumber(curMois);
         if (textesOfMonth.size() != 0) {
-            curTexte = dbManager.getTexteByJour(jour + "-" + mois);
+            curTexte = dbManager.getTexteByJour(curJour + "-" + curMois);
             if (null == curTexte)
                 launchTextesDownloader();
             else
@@ -93,14 +86,14 @@ public class MainActivity extends AppCompatActivity implements TextesDownloaderH
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
+        switch ( item.getItemId() ) {
+            case R.id.action_dowload:
+                Downloader fullDowlDownloader = new Downloader(this);
+                fullDowlDownloader.addTarget(-1); // Pour télécharger les textes complets
+                break;
 
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
+            case R.id.action_settings:
+                return true;
         }
 
         return super.onOptionsItemSelected(item);
@@ -144,6 +137,12 @@ public class MainActivity extends AppCompatActivity implements TextesDownloaderH
         textWaiting = (TextView) dialogDownload.findViewById(R.id.waiting_text);
         textWaiting.setText("Téléchargement des textes ...");
         dialogDownload.show();
+        /****   New Version  ****/
+        Downloader monthDownloader = new Downloader(this);
+        monthDownloader.addTarget(Calendar.getInstance().get(Calendar.MONTH) + 1);
+
+        /****   Old Version  ****/
+        /*
         try {
             TextesDownloader downloader = new TextesDownloader();
             downloader.setMonthNumber(Calendar.getInstance().get(Calendar.MONTH) + 1);
@@ -156,6 +155,7 @@ public class MainActivity extends AppCompatActivity implements TextesDownloaderH
             Toast.makeText(this, ex.getMessage(), Toast.LENGTH_LONG)
                     .show();
         }
+        */
     }
 
     private boolean checkInternetConnection() {
@@ -203,5 +203,26 @@ public class MainActivity extends AppCompatActivity implements TextesDownloaderH
             tvPrelude.setText( texte.getPrelude() );
             tvMessage.setText( texte.getMessage() );
         }
+    }
+
+    @Override
+    public void onResponse(JSONObject response) {
+        dialogDownload.dismiss();
+        System.out.println("Réponse : " + response.toString());
+        Toast.makeText(this, "Réponse : " + response.toString(), Toast.LENGTH_LONG)
+                .show();
+        /* Show current message if not shown */
+        if(curTexte == null) {
+            curTexte = dbManager.getTexteByJour(curJour + "-" + curMois);
+            showTexte(curTexte);
+        }
+    }
+
+    @Override
+    public void onErrorResponse(VolleyError error) {
+        dialogDownload.dismiss();
+        System.out.println("erreur : " + error.getMessage());
+        Toast.makeText(this, "erreur message : " + error.getMessage(), Toast.LENGTH_LONG)
+                .show();
     }
 }
